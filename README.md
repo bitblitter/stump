@@ -1,4 +1,6 @@
 stump
 =====
 
-A minimal framework for very small web applications
+A minimal PHP framework for very small web applications
+
+Using idiorm for database access right now.
