@@ -10,12 +10,12 @@ class Stump
 {
     protected $config = array();
     protected $routes = array();
+    protected $modules = array();
 
     function __construct(array $config=array())
     {
         $this->config = $config;
     }
-
 
     /**
      * Set up the application.
@@ -23,16 +23,43 @@ class Stump
      */
     public function setup()
     {
-        $dbConfig = $this->getConfig('db', null);
-        if(is_array($dbConfig))
+    }
+
+
+    /**
+     * Registers a module, a function that can be shared across the application.
+     * The function must return a callable, that will be executed each time the
+     * module is instanced.
+     *
+     * @param $moduleName
+     * @param $moduleCallable
+     * @param array $settings   Application settings to apply before registering.
+     */
+    public function registerModule($moduleName, $moduleCallable, array $settings = array())
+    {
+        $this->config = array_merge($this->config, $settings);
+        $this->modules[$moduleName] = $moduleCallable;
+    }
+
+    /**
+     * Calls a registered module
+     *
+     * @param $moduleName
+     * @throws \Exception
+     * @return mixed|null
+     */
+    public function module($moduleName)
+    {
+        if(isset($this->modules[$moduleName]))
         {
-            $dsn = sprintf('mysql:host=%s;dbname=%s',
-                $dbConfig['host'],
-                $dbConfig['database']);
-            \ORM::configure($dsn);
-            \ORM::configure('username', $dbConfig['user']);
-            \ORM::configure('password', $dbConfig['password']);
+            $moduleCallable = $this->modules[$moduleName];
+            if(is_callable($moduleCallable)){
+                return call_user_func($moduleCallable, $this);
+            } else {
+                throw new \Exception('invalid module callable: '.print_r($moduleCallable, true));
+            }
         }
+        return null;
     }
 
     /**
@@ -62,6 +89,7 @@ class Stump
     {
         $this->config[$key] = $value;
     }
+
 
     /**
      * Set a route.
@@ -104,8 +132,20 @@ class Stump
      */
     public function halt($error='unspecified error', $httpErrorCode = 404)
     {
+        $errorConfig = $this->getConfig('error_views', null);
+        $template = null;
+        if(is_array($errorConfig)){
+            $template = $errorConfig['default'];
+            if(isset($errorConfig[$httpErrorCode])){
+                $template = $errorConfig[$httpErrorCode];
+            }
+        }
         header('X-Error-Message: '.$error, true, $httpErrorCode);
-        die($error);
+        if($template){
+            die($this->render($template, array('message' => $error)));
+        } else {
+            die($error);
+        }
     }
 
     /**
@@ -114,7 +154,7 @@ class Stump
     public function run()
     {
         $this->setup();
-        $path = str_replace($_SERVER['SCRIPT_NAME'], '', $_SERVER['REQUEST_URI']);
+        $path = $this->getBaseURL();
         $path = preg_replace('/\?.*/', '', $path);
         if($path == '') $path = '/';
         $parameters = array();
@@ -127,6 +167,21 @@ class Stump
         } else {
             $this->halt('No route found for '.$path);
         }
+    }
+
+    /**
+     * Check what URL should be used as base.
+     * @return mixed
+     */
+    protected function getBaseURL()
+    {
+        //using mod_rewrite?
+        if(isset($_SERVER['REDIRECT_URL'])){
+            $ret = str_replace(dirname($_SERVER['SCRIPT_NAME']), '', $_SERVER['REQUEST_URI']);
+        } else {
+            $ret = str_replace($_SERVER['SCRIPT_NAME'], '', $_SERVER['REQUEST_URI']);
+        }
+        return $ret;
     }
 
     /**
@@ -183,5 +238,6 @@ class Stump
         } else {
             $this->halt('View not found', 404);
         }
+        return true;
     }
 }
