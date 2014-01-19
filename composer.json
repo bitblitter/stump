@@ -1,3 +1,7 @@
 {
-    "name": "bitblitter/stump"
+    "name": "bitblitter/stump",
+    "description" : "A minimal framework for very small web applications",
+    "autoload" : {
+        "psr-4" : { "Bitblitter\\" : "." }
+    }
 }
